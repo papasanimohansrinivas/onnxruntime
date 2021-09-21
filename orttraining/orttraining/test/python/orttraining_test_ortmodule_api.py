@@ -2409,6 +2409,50 @@ def test_eval_with_dropout():
     # Assert that the output from torch is the same as the one from ORTModule
     _test_helpers.assert_values_are_close(output, output_pt)
 
+
+def test_dropout():
+    class NeuralNetDropout(torch.nn.Module):
+        def __init__(self, input_size, hidden_size, num_classes):
+            super(NeuralNetDropout, self).__init__()
+
+            self.fc1 = torch.nn.Linear(input_size, hidden_size)
+            self.relu = torch.nn.ReLU()
+            self.fc2 = torch.nn.Linear(hidden_size, num_classes)
+            self.dropout = torch.nn.Dropout(p=0.1)
+
+        def forward(self, input1):
+            out = self.fc1(input1)
+            out = self.relu(out)
+            out = self.fc2(out)
+            out = self.dropout(out)
+            return out
+
+
+    def run_step(model, x):
+        out = model(x)
+        loss = out.sum()
+        loss.backward()
+        return out
+
+
+    device = 'cuda'
+
+    # N, D_in, H, D_out = 480, 4096, 500, 4096
+    N, D_in, H, D_out = 120, 15360, 500, 15360
+    pt_model = NeuralNetDropout(D_in, H, D_out).to(device)
+    ort_model = ORTModule(copy.deepcopy(pt_model))
+
+    for step in range(100):
+        x = torch.randn(N, D_in, device=device)
+        y = x.clone()
+        ort_prediction = run_step(ort_model, x)
+        pt_prediction = run_step(pt_model, y)
+
+    assert ort_prediction is not None
+    assert pt_prediction is not None
+    # Assert that the output from torch is the same as the one from ORTModule
+    # _test_helpers.assert_values_are_close(output, output_pt)
+
 def test_with_torch_no_grad_context():
     device = 'cuda'
 
