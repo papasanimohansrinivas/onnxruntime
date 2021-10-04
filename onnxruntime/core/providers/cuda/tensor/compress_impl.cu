@@ -16,13 +16,17 @@
 namespace onnxruntime {
 namespace cuda {
 
-cudaError_t CompressCalcPrefixSumTempStorageBytes(cudaStream_t stream, const int8_t* condition_data, int* condition_cumulative_sum, int length, size_t& temp_storage_bytes) {
-  return cub::DeviceScan::InclusiveSum(
-    nullptr, temp_storage_bytes, condition_data, condition_cumulative_sum, length, stream);
+// Single thread kernel
+__global__ void _InclusiveSum(const int8_t* input, int n, int* sum) {
+  sum[0] = input[0];
+  for (int i = 0, limit = n - 1; i < limit; ++i) {
+    sum[i + 1] = sum[i] + input[i + 1];
+  }
 }
-cudaError_t CompressInclusivePrefixSum(cudaStream_t stream, void* d_temp_storage, size_t temp_storage_bytes, const int8_t* condition_data, int* condition_cumulative_sum, int length) {
-  return cub::DeviceScan::InclusiveSum(
-    d_temp_storage, temp_storage_bytes, condition_data, condition_cumulative_sum, length, stream);
+
+void CompressInclusiveSum(cudaStream_t stream, const int8_t* input, const int N, int* condition_cumulative_sum) {
+  if (N < 1) return;
+  _InclusiveSum<<<1, 1, 0, stream>>>(input, N, condition_cumulative_sum);
 }
 
 template <typename T>

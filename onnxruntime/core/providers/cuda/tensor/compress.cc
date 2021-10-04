@@ -3,6 +3,7 @@
 
 #include "compress.h"
 #include "compress_impl.h"
+#include <iomanip>
 
 namespace onnxruntime {
 namespace cuda {
@@ -50,20 +51,8 @@ Status Compress::ComputeInternal(OpKernelContext* ctx) const {
 
   auto condition_cumulative_sum_buffer = GetScratchBuffer<int32_t>(valid_condition_length);
   auto condition_cumulative_sum = condition_cumulative_sum_buffer.get();
-  size_t temp_storage_bytes = 0;
-  CUDA_RETURN_IF_ERROR(CompressCalcPrefixSumTempStorageBytes(Stream(),
-                                                             reinterpret_cast<const int8_t*>(condition_data),
-                                                             condition_cumulative_sum,
-                                                             static_cast<int>(valid_condition_length),
-                                                             temp_storage_bytes));
-  auto temp_buffer = GetScratchBuffer<uint8_t>(temp_storage_bytes);
-  auto d_temp_storage = temp_buffer.get();
-  CUDA_RETURN_IF_ERROR(CompressInclusivePrefixSum(Stream(),
-                                                  d_temp_storage,
-                                                  temp_storage_bytes,
-                                                  reinterpret_cast<const int8_t*>(condition_data),
-                                                  condition_cumulative_sum,
-                                                  static_cast<int>(valid_condition_length)));
+  CompressInclusiveSum(Stream(), reinterpret_cast<const int8_t*>(condition_data),
+                       static_cast<int>(valid_condition_length), condition_cumulative_sum);
 
   // cudaMemcpyAsync from device memory to pageable host memory will return only once the copy has completed.
   int32_t positive_condition_count = 0;
